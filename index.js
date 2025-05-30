@@ -11,9 +11,9 @@ app.use(express.urlencoded({ extended: true }));
 app.listen(3000, () => console.log('Express Server running on port 3000'));
 app.use('/media', express.static(path.join(__dirname, 'media')));
 
-const clients = new Map(); // Store multiple clients
-const qrCodes = new Map(); // Store QR codes
-const clientStatus = new Map(); // Store client status
+const clients = new Map(); 
+const qrCodes = new Map();
+const clientStatus = new Map(); 
 const failureTimeouts = {};
 const STATUS_WEBHOOK_URL = 'http://127.0.0.1:8000/api/v1/whatsapp/status';
 const mimeExtensions = {
@@ -28,8 +28,6 @@ const mimeExtensions = {
     'application/json': '.json', 'application/xml': '.xml','audio/ogg; codecs=opus': '.ogg'
 };
 
-
-// Start WhatsApp session for a user
 app.post('/start-client', async (req, res) => {
     const { userId } = req.body;
     if (!userId) return res.status(400).json({ error: 'userId is required' });
@@ -51,10 +49,9 @@ app.post('/start-client', async (req, res) => {
     
     clients.set(userId, client);
     clientStatus.set(userId, 'INITIALIZING');
-    qrCodes.delete(userId); // Clear any existing QR code
+    qrCodes.delete(userId); 
 
     client.on('qr', (qr) => {
-        // Only log and store QR if client is still in initializing state
         const currentStatus = clientStatus.get(userId);
         if (currentStatus === 'INITIALIZING') {
             console.log(`QR Code generated for ${userId}`);
@@ -67,14 +64,14 @@ app.post('/start-client', async (req, res) => {
     client.on('ready', () => {
         console.log(`WhatsApp Client ${userId} is ready`);
         clientStatus.set(userId, 'READY');
-        qrCodes.delete(userId); // Clear QR code when ready
+        qrCodes.delete(userId); 
 		setupClientEventListeners(client);
     });
 
     client.on('authenticated', () => {
         console.log(`WhatsApp Client ${userId} is authenticated`);
         clientStatus.set(userId, 'AUTHENTICATED');
-        qrCodes.delete(userId); // Clear QR code when authenticated
+        qrCodes.delete(userId); 
     });
 
     client.on('auth_failure', () => {
@@ -95,12 +92,9 @@ app.post('/start-client', async (req, res) => {
     return res.json({ message: 'Initializing WhatsApp client', status: 'INITIALIZING' });
 });
 
-// Get QR code for user
 app.get('/get-qr/:userId', (req, res) => {
     const { userId } = req.params;
     const status = clientStatus.get(userId);
-    
-    // Don't return QR if already authenticated or ready
     if (status === 'READY' || status === 'AUTHENTICATED') {
         return res.json({ status: 'already_connected', message: 'WhatsApp is already connected' });
     }
@@ -113,14 +107,11 @@ app.get('/get-qr/:userId', (req, res) => {
     return res.json({ status: 'success', qr });
 });
 
-// Check connection status
 app.get('/is-connected/:userId', (req, res) => {
-	console.log("status called ");
-    const { userId } = req.params;
+	const { userId } = req.params;
     const client = clients.get(userId);
     const status = clientStatus.get(userId);
-	console.log(status);
-    
+	
     if (!client) {
         return res.json({ status: 'not_found', connected: false });
     }
@@ -138,17 +129,13 @@ app.get('/is-connected/:userId', (req, res) => {
     }
 });
 
-
-// Get client status
 app.get('/client-status/:userId', (req, res) => {
     const { userId } = req.params;
     const status = clientStatus.get(userId);
     return res.json({ status: status || 'not_found' });
 });
 
-// Stop/Logout WhatsApp client for a user
 app.post('/stop-client', async (req, res) => {
-	console.log("logout triggered in express");
     const { userId } = req.body;
     if (!userId) return res.status(400).json({ error: 'userId is required' });
     
@@ -159,14 +146,8 @@ app.post('/stop-client', async (req, res) => {
     
     try {
         console.log(`Stopping WhatsApp client for user: ${userId}`);
-        
-        // Logout the client
         await client.logout();
-        
-        // Destroy the client
         await client.destroy();
-        
-        // Clean up all data for this user
         clients.delete(userId);
         qrCodes.delete(userId);
         clientStatus.delete(userId);
@@ -183,7 +164,6 @@ app.post('/stop-client', async (req, res) => {
     }
 });
 
-// Get all active clients (for debugging)
 app.get('/active-clients', (req, res) => {
     const activeClients = Array.from(clients.keys()).map(userId => ({
         userId,
@@ -196,14 +176,10 @@ app.get('/active-clients', (req, res) => {
         clients: activeClients 
     });
 });
-
-// Cleanup inactive clients (run periodically)
 const cleanupInactiveClients = () => {
     console.log('Running cleanup for inactive clients...');
-    
     clients.forEach(async (client, userId) => {
         try {
-            // Check if client is still responsive
             const state = await client.getState();
             if (!state || state === 'CONFLICT' || state === 'UNPAIRED') {
                 console.log(`Cleaning up inactive client: ${userId}`);
@@ -234,14 +210,9 @@ const cleanupInactiveClients = () => {
     });
 };
 
-// Run cleanup every 5 minutes
 setInterval(cleanupInactiveClients, 5 * 60 * 1000);
-
-// Graceful shutdown
 process.on('SIGINT', async () => {
     console.log('Shutting down server...');
-    
-    // Cleanup all clients
     const cleanupPromises = Array.from(clients.entries()).map(async ([userId, client]) => {
         try {
             console.log(`Cleaning up client ${userId}...`);
@@ -257,8 +228,6 @@ process.on('SIGINT', async () => {
     process.exit(0);
 });
 
-
-// Send message
 app.post('/send-message', async (req, res) => {
     console.log("Incoming request data:", req.body);
     const { userId, phoneNumber, message, mediaUrl } = req.body;
@@ -269,18 +238,14 @@ app.post('/send-message', async (req, res) => {
     if (!client) {
         return res.status(404).json({ error: 'Client not found' });
     }
-    
     if (status !== 'READY' || !client.info?.wid) {
         return res.status(400).json({ error: 'WhatsApp is not connected' });
     }
-    
     if (!phoneNumber || phoneNumber.length < 10) {
         return res.status(400).json({ error: "Invalid phone number format" });
     }
-    
     try {
         const formattedNumber = phoneNumber.startsWith('+') ? phoneNumber.slice(1) : phoneNumber;
-
         let sentMessage;
         let fullId;
         let messageSid;
@@ -291,14 +256,12 @@ app.post('/send-message', async (req, res) => {
                 const media = await MessageMedia.fromUrl(mediaUrl, { unsafeMime: true });
                 sentMessage = await client.sendMessage(`${formattedNumber}@c.us`, media);
                 fullId = sentMessage.id._serialized; 
-                console.log(fullId);
                 messageSid = fullId.split('_').pop();
-                console.log(messageSid);
-                
-                // Send status update asynchronously
-                sendStatusUpdate(messageSid, 'sent').catch(err => 
+             
+			    sendStatusUpdate(messageSid, 'sent').catch(err => 
                     console.error('Failed to send status update:', err)
                 );
+				
             } catch (error) {
                 console.error("Error fetching media:", error);
                 if (messageSid) {
@@ -311,11 +274,7 @@ app.post('/send-message', async (req, res) => {
         } else {
             sentMessage = await client.sendMessage(`${formattedNumber}@c.us`, message);
             fullId = sentMessage.id._serialized; 
-            console.log(fullId);
             messageSid = fullId.split('_').pop();
-            console.log(messageSid);
-            
-            // Send status update asynchronously
             sendStatusUpdate(messageSid, 'sent').catch(err => 
                 console.error('Failed to send status update:', err)
             );
@@ -340,15 +299,14 @@ app.post('/send-message', async (req, res) => {
     }
 });
 
-// Function to setup event listeners for a specific client
 function setupClientEventListeners(client, userId) {
-	//receiving new messages 
 	 client.on('message', async (msg) => {
 		try {
 			let mediaUrl = null;
 			let mediaType = null;
 			let normalizedMimeType = null;
 			let MessageType = null;
+            let filePath= null;
 			
 			if (msg.hasMedia) {
 				const media = await msg.downloadMedia();
@@ -357,7 +315,7 @@ function setupClientEventListeners(client, userId) {
 				normalizedMimeType = media.mimetype.split(';')[0].trim();  
 				console.log(normalizedMimeType);
 				const extension = mimeExtensions[normalizedMimeType] || '.bin';
-				const filePath = path.join(__dirname, 'media', `${Date.now()}${extension}`);
+				filePath = path.join(__dirname, 'media', `${Date.now()}${extension}`);
 				fs.writeFileSync(filePath, media.data, 'base64');
 				mediaUrl = `http://127.0.0.1:3000/media/${path.basename(filePath)}`;
 				if(msg.type == 'ptt'){
@@ -366,8 +324,7 @@ function setupClientEventListeners(client, userId) {
 					MessageType = msg.type;
 				}
 
-			}
-			
+			}			
 			const webhookData = {
 				From: msg.from,
 				To: client.info.wid._serialized,
@@ -376,25 +333,37 @@ function setupClientEventListeners(client, userId) {
 				MessageType: MessageType,
 				MediaUrl0: mediaUrl,
 				MediaContentType0: normalizedMimeType ?? 'unknown',
-			};
-			
+			};			
 			await axios.post('http://127.0.0.1:8000/api/v1/whatsapp', webhookData, {
 				headers: {
 					'Content-Type': 'application/json'
 				}
 			});
+            //console.log(filePath);
+            if (filePath) {
+            setTimeout(() => {
+                //console.log(`Attempting to delete file: ${filePath}`);
+                if (fs.existsSync(filePath)) {
+                    fs.unlink(filePath, (err) => {
+                        if (err) {
+                            console.error('Error deleting file:', err);
+                        } else {
+                            //console.log(`File deleted successfully: ${filePath}`);
+                        }
+                    });
+                } else {
+                    console.log(`File not found: ${filePath}`);
+                }
+            }, 60000);
+         }   
 		}catch (error) {
             console.error(`Error forwarding message for user ${userId}:`, error);
         }
     });
-	
-	//checkign status 
-   client.on('message_ack', async (msg, ack) => {
-    console.log("Received ACK:", { id: msg.id._serialized, ack });
 
+    client.on('message_ack', async (msg, ack) => {
     const fullId = msg.id._serialized;
-    const messageSid = fullId.split('_').pop();
-    
+    const messageSid = fullId.split('_').pop(); 
     let status;
     switch (ack) {
         case 1: status = 'sent'; break;  
@@ -402,30 +371,20 @@ function setupClientEventListeners(client, userId) {
         case 3: status = 'read'; break;  
         default: return;
     }
-
-    console.log(`Updating status for ${messageSid}: ${status}`);
     sendStatusUpdate(messageSid, status).catch(err => 
         console.error('Failed to send status update:', err)
     );
-
-    // Cancel the failure timeout if status is updated
     if (failureTimeouts[messageSid]) {
         clearTimeout(failureTimeouts[messageSid]);
-        delete failureTimeouts[messageSid]; // Clean up memory
+        delete failureTimeouts[messageSid]; 
         console.log(`Cleared timeout for message: ${messageSid}`);
     }
 });
 
-
-
-
-    // Listen for message send failures
 client.on('message_create', async (msg) => {
     if (msg.fromMe) {
         try {
             const msgSid = msg.id._serialized.split('_').pop();
-
-            // Start a timeout to check if the message was sent successfully
             failureTimeouts[msgSid] = setTimeout(async () => {
                 if (msg.ack === undefined || msg.ack === 0) {
                     console.log(`Message ${msgSid} still not delivered—marking as failed`);
@@ -435,8 +394,7 @@ client.on('message_create', async (msg) => {
                 } else {
                     console.log(`Message ${msgSid} was acknowledged—no failure status needed`);
                 }
-            }, 20000); // 20-second timeout
-
+            }, 20000); 
         } catch (error) {
             console.error('Error checking message status:', error);
         }
@@ -446,22 +404,16 @@ client.on('message_create', async (msg) => {
 
 }
 
-// Call this function when each client is ready
-// Add this to your existing client initialization code:
-// setupClientEventListeners(client, userId);
-
-// Message status update function
 async function sendStatusUpdate(messageSid, status, errorCode = null) {
     try {
         const payload = {
-            MessageSid: messageSid, // Change to 'sid' if your Laravel uses 'sid'
+            MessageSid: messageSid, 
             MessageStatus: status
         };
         
         if (errorCode) {
             payload.ErrorCode = errorCode;
         }
-        
         await axios.post(STATUS_WEBHOOK_URL, payload);
         console.log('Status update sent:', { messageSid, status, errorCode });
     } catch (error) {

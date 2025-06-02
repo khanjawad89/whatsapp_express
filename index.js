@@ -1,5 +1,5 @@
 const express = require('express');
-const { Client, MessageMedia  } = require('whatsapp-web.js');
+const { Client, MessageMedia, LocalAuth  } = require('whatsapp-web.js');
 const cors = require('cors');
 const app = express();
 const axios = require('axios');
@@ -15,7 +15,7 @@ const clients = new Map();
 const qrCodes = new Map();
 const clientStatus = new Map(); 
 const failureTimeouts = {};
-const STATUS_WEBHOOK_URL = 'http://127.0.0.1:8000/api/v1/whatsapp/status';
+const STATUS_WEBHOOK_URL = 'https://test.crm.noktaclinic.com/api/v1/whatsapp/status';
 const mimeExtensions = {
     'image/jpeg': '.jpeg', 'image/jpg': '.jpg', 'image/png': '.png', 'image/gif': '.gif',
     'image/webp': '.webp', 'audio/mpeg': '.mp3', 'audio/wav': '.wav', 'audio/ogg': '.ogg',
@@ -49,7 +49,20 @@ app.post('/start-client', async (req, res) => {
     }
 
     const client = new Client({
-        puppeteer: { headless: true },
+        
+    authStrategy: new LocalAuth(),
+    puppeteer: {
+        headless: true,
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--single-process',
+            '--disable-gpu'
+        ]
     });
     
     clients.set(userId, client);
@@ -322,7 +335,7 @@ function setupClientEventListeners(client, userId) {
 				const extension = mimeExtensions[normalizedMimeType] || '.bin';
 				filePath = path.join(__dirname, 'media', `${Date.now()}${extension}`);
 				fs.writeFileSync(filePath, media.data, 'base64');
-				mediaUrl = `http://127.0.0.1:3000/media/${path.basename(filePath)}`;
+				mediaUrl = `http://express.crm.test.noktaclinic.com/media/${path.basename(filePath)}`;
 				if(msg.type == 'ptt'){
 					MessageType = 'audio';					
 				} else {
@@ -339,7 +352,7 @@ function setupClientEventListeners(client, userId) {
 				MediaUrl0: mediaUrl,
 				MediaContentType0: normalizedMimeType ?? 'unknown',
 			};			
-			await axios.post('http://127.0.0.1:8000/api/v1/whatsapp', webhookData, {
+			await axios.post('https://test.crm.noktaclinic.com/api/v1/whatsapp', webhookData, {
 				headers: {
 					'Content-Type': 'application/json'
 				}

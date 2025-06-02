@@ -28,6 +28,11 @@ const mimeExtensions = {
     'application/json': '.json', 'application/xml': '.xml','audio/ogg; codecs=opus': '.ogg'
 };
 
+app.get('/',async(req, res)=>{
+	res.send('Hello, Express is working!');
+});
+
+
 app.post('/start-client', async (req, res) => {
     const { userId } = req.body;
     if (!userId) return res.status(400).json({ error: 'userId is required' });
